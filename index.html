@@ -17,6 +17,246 @@
   label{display:block;font-weight:600;margin-bottom:8px}
   input{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff}
   input:focus{outline:2px solid var(--pri);border-color:var(--pri)}
+  input:disabled{background:#f0f2f4;color:var(--mute)}
+  .code{font-size:32px;letter-spacing:12px;text-align:center;direction:ltr;font-weight:800}
+  .list{max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px}
+  .list button{display:block;width:100%;text-align:right;background:#fff;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:inherit;cursor:pointer}
+  .list button:last-child{border-bottom:0}
+  .list button:hover{background:var(--pri2)}
+  .chosen{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--pri2);border-radius:10px;padding:12px;font-weight:600}
+  .chosen a{color:var(--pri);font-size:14px;cursor:pointer;white-space:nowrap}
+  .btn{width:100%;font:inherit;font-weight:800;padding:14px;border:0;border-radius:12px;background:var(--pri);color:#fff;cursor:pointer}
+  .btn:disabled{opacity:.5}
+  .ghost{background:#fff;color:var(--pri);border:1px solid var(--pri)}
+  .seg{display:flex;flex-wrap:wrap;gap:8px}
+  .seg button{flex:1 1 30%;font:inherit;padding:11px 8px;border:1px solid var(--line);background:#fff;border-radius:10px;cursor:pointer}
+  .seg button.on{border-color:var(--pri);background:var(--pri2);font-weight:800;color:var(--pri)}
+  .seg button:disabled{opacity:.35;cursor:not-allowed}
+  .seg.ltr{direction:ltr}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .msg{border-radius:12px;padding:14px;font-weight:600;line-height:1.7}
+  .ok{background:var(--pri2);color:var(--pri)}
+  .err{background:var(--bad2);color:var(--bad)}
+  .wait{background:var(--warn2);color:var(--warn)}
+  .big{font-size:64px;text-align:center;line-height:1}
+  .hide{display:none!important}
+  .small{font-size:13px;color:var(--mute)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>تسجيل الحضور</h1>
+  <div class="sub" id="hdr">جارٍ التحميل…</div>
+
+  <div id="none" class="card hide">
+    <div class="msg wait">لا توجد محاضرة مفتوحة للتسجيل الآن. التسجيل يُفتح من قِبل الأستاذ داخل القاعة فقط.</div>
+    <p></p><button class="btn ghost" onclick="init()">تحديث</button>
+  </div>
+
+  <div id="form" class="hide">
+    <div class="card hide" id="sessCard">
+      <label>المحاضرة</label>
+      <div class="seg" id="sessBtns"></div>
+    </div>
+
+    <div class="card">
+      <label>الدراسة</label>
+      <div class="seg" id="studyBtns"></div>
+      <p></p>
+      <label>الشعبة</label>
+      <div class="seg ltr" id="letterBtns"></div>
+    </div>
+
+    <div class="card">
+      <label>اسمك</label>
+      <div id="pick">
+        <input id="q" placeholder="اختر الدراسة والشعبة أولاً" autocomplete="off" oninput="filter()" disabled>
+        <div class="list hide" id="list"></div>
+      </div>
+      <div id="chosen" class="chosen hide"><span id="chName"></span><a id="chg" onclick="unpick()">تغيير</a></div>
+      <div class="small hide" id="boundNote" style="margin-top:8px">هذا الجهاز مربوط باسمك. ليس اسمك؟ راجع الأستاذ.</div>
+    </div>
+
+    <div class="card">
+      <label>الرمز الظاهر على شاشة القاعة</label>
+      <input id="code" class="code" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="····">
+    </div>
+
+    <button class="btn" id="go" onclick="submit()">سجّل حضوري</button>
+    <p></p>
+    <div id="out"></div>
+  </div>
+
+  <div id="done" class="card hide">
+    <div class="big">✓</div>
+    <div class="msg ok" style="text-align:center;margin-top:12px" id="doneTxt"></div>
+  </div>
+</div>
+
+<script>
+// الخادم (Google Apps Script) — الاتصال يتم بدون كوكيز Google
+var API = 'https://script.google.com/macros/s/AKfycby0Oi8NyrtS1VffaPFOu0wXxGGpRH0r6rEwRDecjap8ofJUc2ZL0UdWfEOySrKc_4BNtQ/exec';
+var QS = new URLSearchParams(location.search);
+var QS_SID = (QS.get('s') || '').replace(/[^\w-]/g, '');
+var QS_CODE = (QS.get('c') || '').replace(/\D/g, '').slice(0, 4);
+var STUDIES = ['صباحي', 'مسائي'], LETTERS = ['A', 'B', 'C'];
+var TOK = getToken(), FP = fingerprint();
+var state = { sid: null, catalog: [], study: '', letter: '', sec: '', list: [], chosen: null, bound: null, locked: false };
+
+function $(id){ return document.getElementById(id); }
+function show(id, on){ $(id).classList.toggle('hide', !on); }
+function rnd(){ var a = new Uint8Array(16); (window.crypto||window.msCrypto).getRandomValues(a); return Array.prototype.map.call(a, function(b){ return ('0'+b.toString(16)).slice(-2); }).join(''); }
+function getToken(){
+  var k = 'att_device_v1', t = null;
+  try { t = localStorage.getItem(k); if (!t) { t = rnd() + rnd(); localStorage.setItem(k, t); } return t; } catch (e) {}
+  var m = document.cookie.match(/att_device_v1=([\w-]+)/);
+  if (m) return m[1];
+  t = rnd() + rnd();
+  try { document.cookie = 'att_device_v1=' + t + ';max-age=31536000;path=/;SameSite=None;Secure'; } catch (e) {}
+  return t;
+}
+function fingerprint(){
+  var s = [navigator.userAgent, navigator.language, screen.width + 'x' + screen.height, screen.colorDepth,
+    (Intl.DateTimeFormat().resolvedOptions().timeZone || ''), navigator.hardwareConcurrency || '', navigator.maxTouchPoints || ''].join('|');
+  var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16);
+}
+function norm(s){ return String(s).replace(/[أإآا]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[ًٌٍَُِّْـ]/g,'').replace(/\s+/g,' ').trim(); }
+function run(fn){ var a = [].slice.call(arguments, 1);
+  return fetch(API, { method: 'POST', credentials: 'omit', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: a }) })
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){ if (!j.ok) throw new Error(j.error || 'خطأ'); return j.data; }); }
+function out(cls, txt){ $('out').innerHTML = ''; if (!txt) return; var d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = txt; $('out').appendChild(d); }
+function btn(txt, on, dis, fn){ var b = document.createElement('button'); b.textContent = txt; if (on) b.className = 'on'; b.disabled = !!dis; b.onclick = fn; return b; }
+function secFor(study, letter){ var c = state.catalog.filter(function(x){ return x.study === study && x.letter === letter; })[0]; return c ? c.name : ''; }
+
+function init(){
+  $('hdr').textContent = 'جارٍ التحميل…';
+  run('studentInit', TOK).then(function(r){
+    state.bound = r.bound; state.catalog = r.catalog || [];
+    if (!r.open.length) { $('hdr').textContent = ''; show('none', true); show('form', false); return; }
+    show('none', false); show('form', true);
+    if (QS_CODE) $('code').value = QS_CODE;
+    var pre = r.open.filter(function(s){ return s.sid === QS_SID; })[0] || (r.open.length === 1 ? r.open[0] : null);
+    var box = $('sessBtns'); box.innerHTML = '';
+    r.open.forEach(function(s){
+      var b = btn(s.label + ' — محاضرة ' + s.lec, false, false, function(){ selectSess(s); }); b.dataset.sid = s.sid; box.appendChild(b);
+    });
+    show('sessCard', r.open.length > 1 || !pre);
+    if (pre) selectSess(pre); else $('hdr').textContent = 'اختر المحاضرة';
+    if (state.bound) { state.locked = true; state.study = state.bound.study; state.letter = state.bound.letter; }
+    drawPickers();
+    if (state.bound) { state.sec = state.bound.sec; choose({ id: state.bound.id, name: state.bound.name }, true); }
+  }).catch(function(e){ $('hdr').textContent = ''; out('err', 'تعذر الاتصال: ' + e.message); show('form', true); });
+}
+
+function selectSess(s){
+  state.sid = s.sid;
+  [].forEach.call($('sessBtns').children, function(b){ b.classList.toggle('on', b.dataset.sid === s.sid); });
+  $('hdr').textContent = s.label + ' — محاضرة ' + s.lec;
+}
+
+function drawPickers(){
+  var sb = $('studyBtns'), lb = $('letterBtns'); sb.innerHTML = ''; lb.innerHTML = '';
+  STUDIES.forEach(function(st){
+    var has = state.catalog.some(function(x){ return x.study === st; });
+    sb.appendChild(btn(st, state.study === st, state.locked || !has, function(){ setStudy(st); }));
+  });
+  LETTERS.forEach(function(l){
+    var has = state.study && secFor(state.study, l);
+    lb.appendChild(btn(l, state.letter === l, state.locked || !has, function(){ setLetter(l); }));
+  });
+}
+function setStudy(st){
+  state.study = st;
+  if (state.letter && !secFor(st, state.letter)) state.letter = '';
+  drawPickers(); loadRoster();
+}
+function setLetter(l){ state.letter = l; drawPickers(); loadRoster(); }
+
+function loadRoster(){
+  unpick();
+  var sec = state.study && state.letter ? secFor(state.study, state.letter) : '';
+  state.sec = sec; state.list = [];
+  $('q').disabled = !sec;
+  $('q').placeholder = sec ? 'اكتب أول حروف اسمك…' : 'اختر الدراسة والشعبة أولاً';
+  if (!sec) return;
+  out('', '');
+  run('getSectionRoster', sec).then(function(r){
+    if (!r.ok) { out('err', r.msg); return; }
+    if (r.sec !== state.sec) return;
+    state.list = r.list.map(function(x){ x.n = norm(x.name); return x; });
+    filter(); $('q').focus();
+  }).catch(function(e){ out('err', 'تعذر تحميل الأسماء: ' + e.message); });
+}
+
+function filter(){
+  var q = norm($('q').value), L = $('list'); L.innerHTML = '';
+  if (q.length < 2 || !state.list.length) { show('list', false); return; }
+  var hits = state.list.filter(function(x){ return x.n.indexOf(q) >= 0; }).slice(0, 25);
+  hits.forEach(function(x){ var b = document.createElement('button'); b.textContent = x.name; b.onclick = function(){ choose(x, false); }; L.appendChild(b); });
+  if (!hits.length) { var d = document.createElement('div'); d.className = 'small'; d.style.padding = '10px'; d.textContent = 'لا يوجد اسم مطابق. تأكد من اختيار الدراسة والشعبة الصحيحة.'; L.appendChild(d); }
+  show('list', true);
+}
+function choose(x, locked){
+  state.chosen = x; $('chName').textContent = x.name;
+  show('pick', false); show('chosen', true); show('chg', !locked); show('boundNote', locked);
+  if (!$('code').value) $('code').focus();
+}
+function unpick(){ state.chosen = null; show('pick', true); show('chosen', false); show('boundNote', false); $('q').value = ''; show('list', false); }
+
+function submit(){
+  var code = $('code').value.replace(/\D/g, '');
+  if (!state.sid) return out('err', 'اختر المحاضرة أولاً.');
+  if (!state.study || !state.letter) return out('err', 'اختر الدراسة والشعبة.');
+  if (!state.chosen) return out('err', 'اختر اسمك من القائمة.');
+  if (code.length !== 4) return out('err', 'اكتب الرمز المكوّن من 4 أرقام.');
+  $('go').disabled = true; out('wait', 'جارٍ التسجيل…');
+  run('checkIn', state.sid, state.chosen.id, code, TOK, FP).then(function(r){
+    $('go').disabled = false;
+    if (r.ok) return done(r.name, r.time, r.already, r.guest);
+    if (r.pending) { out('wait', r.msg); $('go').disabled = true; return poll(); }
+    out('err', r.msg);
+  }).catch(function(e){ $('go').disabled = false; out('err', 'خطأ: ' + e.message); });
+}
+function poll(){
+  var n = 0, t = setInterval(function(){
+    if (++n > 90) { clearInterval(t); $('go').disabled = false; return; }
+    run('checkStatus', state.sid, state.chosen.id).then(function(r){
+      if (r.present) { clearInterval(t); done(state.chosen.name, '', false, false); }
+      else if (!r.pending) { clearInterval(t); $('go').disabled = false; out('err', 'رفض الأستاذ الطلب. راجعه مباشرة.'); }
+    });
+  }, 4000);
+}
+function done(name, time, already, guest){
+  show('form', false); show('sessCard', false); show('done', true);
+  $('doneTxt').textContent = (already ? 'حضورك مسجّل مسبقاً' : 'تم تسجيل حضورك') + ' — ' + name +
+    (guest ? ' (ضيف: ' + state.study + ' ' + state.letter + ')' : '') + (time ? ' (' + time + ')' : '');
+}
+init();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تسجيل الحضور</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f4f6f8;--card:#fff;--ink:#1d2733;--mute:#66737f;--pri:#0b6e4f;--pri2:#e6f4ee;--bad:#b3261e;--bad2:#fdecea;--warn:#8a5a00;--warn2:#fff4dc;--line:#dfe4e8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans Arabic',Tahoma,sans-serif;font-size:17px}
+  .wrap{max-width:480px;margin:0 auto;padding:18px 14px 40px}
+  h1{font-size:22px;margin:4px 0 2px}
+  .sub{color:var(--mute);font-size:14px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+  label{display:block;font-weight:600;margin-bottom:8px}
+  input{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  input:focus{outline:2px solid var(--pri);border-color:var(--pri)}
   .code{font-size:32px;letter-spacing:12px;text-align:center;direction:ltr;font-weight:800}
   .list{max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px}
   .list button{display:block;width:100%;text-align:right;background:#fff;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:inherit;cursor:pointer}
