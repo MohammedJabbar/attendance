@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة الأستاذ — الحضور</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{--bg:#f4f6f8;--card:#fff;--ink:#1d2733;--mute:#66737f;--pri:#0b6e4f;--pri2:#e6f4ee;--bad:#b3261e;--bad2:#fdecea;--warn:#8a5a00;--warn2:#fff4dc;--line:#dfe4e8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans Arabic',Tahoma,sans-serif;font-size:16px}
+  .wrap{max-width:1200px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+  h1{font-size:22px;margin:0 0 12px}
+  label{display:block;font-weight:600;margin:10px 0 6px}
+  input,select{font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff}
+  .row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+  .btn{font:inherit;font-weight:700;padding:11px 16px;border:0;border-radius:10px;background:var(--pri);color:#fff;cursor:pointer}
+  .btn.ghost{background:#fff;color:var(--pri);border:1px solid var(--pri)}
+  .btn.red{background:var(--bad)}
+  .btn.sm{padding:6px 10px;font-size:14px}
+  .hide{display:none!important}
+  .err{background:var(--bad2);color:var(--bad);padding:10px;border-radius:10px;margin-top:10px}
+  .live{display:grid;grid-template-columns:1.2fr 1fr;gap:12px}
+  .show{display:flex;align-items:center;justify-content:space-around;gap:20px;flex-wrap:wrap;text-align:center}
+  .code{font-size:120px;font-weight:800;letter-spacing:18px;direction:ltr;line-height:1;color:var(--pri)}
+  .bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:10px}
+  .bar i{display:block;height:100%;background:var(--pri);transition:width 1s linear}
+  #qr img,#qr canvas{margin:auto}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .stat{flex:1;background:var(--pri2);border-radius:10px;padding:10px;text-align:center}
+  .stat b{display:block;font-size:30px}
+  .tabs{display:flex;gap:6px;margin-bottom:8px}
+  .tabs button{flex:1;font:inherit;padding:8px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer}
+  .tabs button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+  .lst{max-height:60vh;overflow:auto}
+  .it{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line)}
+  .it .t{color:var(--mute);font-size:13px;direction:ltr}
+  .flag{background:var(--warn2);color:var(--warn);border-radius:6px;padding:1px 6px;font-size:12px}
+  .man{background:#eef;color:#336;border-radius:6px;padding:1px 6px;font-size:12px}
+  .badge{background:var(--bad);color:#fff;border-radius:10px;padding:0 7px;font-size:12px;margin-right:4px}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .proj .side{display:none}
+  .proj .live{grid-template-columns:1fr}
+  .proj .code{font-size:200px}
+  @media(max-width:800px){.live{grid-template-columns:1fr}.row{grid-template-columns:1fr}.code{font-size:80px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+
+  <div id="login" class="card" style="max-width:420px;margin:60px auto">
+    <h1>لوحة الأستاذ</h1>
+    <label>رمز الأستاذ</label>
+    <input id="pin" type="password" inputmode="numeric" onkeydown="if(event.key==='Enter')login()">
+    <p></p><button class="btn" onclick="login()" style="width:100%">دخول</button>
+    <div id="lerr" class="err hide"></div>
+  </div>
+
+  <div id="setup" class="hide">
+    <div class="card">
+      <h1>فتح تسجيل الحضور</h1>
+      <div class="row">
+        <div><label>المحاضرة لـ</label><select id="sec" onchange="suggest()"></select></div>
+        <div><label>رقم المحاضرة</label><input id="lec" type="number" min="1" max="15"></div>
+        <div><label>مدة التسجيل (دقيقة)</label><input id="min" type="number" min="1" max="180"></div>
+      </div>
+      <p></p><button class="btn" onclick="start()">افتح التسجيل الآن</button>
+      <div id="serr" class="err hide"></div>
+    </div>
+    <div class="card hide" id="openCard">
+      <b>محاضرات مفتوحة حالياً:</b>
+      <div id="openList"></div>
+    </div>
+  </div>
+
+  <div id="live" class="hide">
+    <div class="top card">
+      <div><b id="title"></b> — <span id="left"></span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn ghost sm" onclick="toggleProj()">وضع العرض</button>
+        <button class="btn ghost sm" onclick="extend(2)">+2 دقيقة</button>
+        <button class="btn red sm" onclick="closeS()">إغلاق وترحيل للسجل</button>
+        <button class="btn ghost sm" onclick="back()">رجوع</button>
+      </div>
+    </div>
+    <div class="live">
+      <div class="card show">
+        <div>
+          <div style="color:var(--mute)">رمز الحضور</div>
+          <div class="code" id="code">----</div>
+          <div class="bar"><i id="cbar" style="width:100%"></i></div>
+          <div style="color:var(--mute);margin-top:6px;font-size:14px">يتغير كل 30 ثانية</div>
+        </div>
+        <div id="qr"></div>
+      </div>
+      <div class="side">
+        <div class="card">
+          <div class="stats">
+            <div class="stat"><b id="np">0</b>حاضر</div>
+            <div class="stat"><b id="nt">0</b>العدد الكلي</div>
+            <div class="stat" style="background:#eef"><b id="ng">0</b>ضيوف</div>
+            <div class="stat" style="background:var(--warn2)"><b id="nf">0</b>تنبيه</div>
+          </div>
+          <div class="tabs">
+            <button class="on" data-t="p" onclick="tab('p')">الحاضرون</button>
+            <button data-t="r" onclick="tab('r')">طلبات الأجهزة <span id="nr" class="badge hide"></span></button>
+            <button data-t="a" onclick="tab('a')">القائمة الكاملة</button>
+          </div>
+          <div id="tp" class="lst"></div>
+          <div id="tr" class="lst hide"></div>
+          <div id="ta" class="hide">
+            <input id="aq" placeholder="بحث بالاسم…" oninput="drawRoster()">
+            <div class="lst" id="al"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="lvErr" class="err hide"></div>
+  </div>
+</div>
+
+<script>
+var PIN = '', CFG = null, SID = null, timer = null, qr = null, lastQR = '', ROSTER = [], live = null, curTab = 'p';
+function $(id){ return document.getElementById(id); }
+function show(id, on){ $(id).classList.toggle('hide', !on); }
+// الخادم (Google Apps Script) — الاتصال يتم بدون كوكيز Google
+var API = 'https://script.google.com/macros/s/AKfycby0Oi8NyrtS1VffaPFOu0wXxGGpRH0r6rEwRDecjap8ofJUc2ZL0UdWfEOySrKc_4BNtQ/exec';
+function run(fn){ var a = [].slice.call(arguments, 1);
+  return fetch(API, { method: 'POST', credentials: 'omit', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: a }) })
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){ if (!j.ok) throw new Error(j.error || 'خطأ'); return j.data; }); }
+function el(tag, cls, txt){ var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+function norm(s){ return String(s).replace(/[أإآا]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/\s+/g,' ').trim(); }
+
+try { PIN = sessionStorage.getItem('att_pin') || ''; } catch (e) {}
+if (PIN) login(true);
+
+function login(silent){
+  if (!silent) PIN = $('pin').value.trim();
+  run('tLogin', PIN).then(function(r){
+    try { sessionStorage.setItem('att_pin', PIN); } catch (e) {}
+    CFG = r; show('login', false); showSetup();
+  }).catch(function(e){ PIN = ''; try { sessionStorage.removeItem('att_pin'); } catch (x) {}
+    if (!silent) { $('lerr').textContent = e.message; show('lerr', true); } });
+}
+function showSetup(){
+  show('setup', true); show('live', false);
+  var s = $('sec'); s.innerHTML = '';
+  CFG.groups.forEach(function(g){ var o = el('option', '', g.label); o.value = g.key; s.appendChild(o); });
+  $('min').value = CFG.defMin; suggest();
+  var L = $('openList'); L.innerHTML = '';
+  CFG.open.forEach(function(o){
+    var d = el('div', 'it'); d.appendChild(el('span', '', o.label + ' — محاضرة ' + o.lec));
+    var b = el('button', 'btn sm', 'متابعة'); b.onclick = function(){ goLive(o.sid); }; d.appendChild(b); L.appendChild(d);
+  });
+  show('openCard', CFG.open.length > 0);
+}
+function suggest(){ $('lec').value = CFG.nextLec[$('sec').value] || 1; }
+
+function start(){
+  show('serr', false);
+  run('tStart', PIN, $('sec').value, $('lec').value, $('min').value)
+    .then(function(r){ goLive(r.sid); })
+    .catch(function(e){ $('serr').textContent = e.message; show('serr', true); });
+}
+
+function goLive(sid){
+  SID = sid; lastQR = ''; ROSTER = [];
+  show('setup', false); show('live', true);
+  $('qr').innerHTML = ''; qr = null;
+  tick(); clearInterval(timer); timer = setInterval(tick, 3000);
+  run('tRoster', PIN, SID).then(function(r){ ROSTER = r; drawRoster(); });
+}
+
+var skew = 0;
+function tick(){
+  run('tLive', PIN, SID).then(function(r){
+    if (r.gone) { back(); return; }
+    live = r; skew = r.now - Date.now(); show('lvErr', false);
+    $('title').textContent = r.label + ' — محاضرة ' + r.lec;
+    $('code').textContent = r.code;
+    $('np').textContent = r.present.length - r.guests; $('nt').textContent = r.total; $('ng').textContent = r.guests;
+    $('nf').textContent = r.present.filter(function(x){ return x.flag; }).length;
+    var nr = r.requests.length; $('nr').textContent = nr; show('nr', nr > 0);
+    drawPresent(r.present); drawReq(r.requests);
+    var pset = {}; r.present.forEach(function(x){ pset[x.id] = 1; });
+    ROSTER.forEach(function(x){ x.p = !!pset[x.id]; }); if (curTab === 'a') drawRoster();
+    if (r.open) {
+      var txt = r.url + '?s=' + r.sid + '&c=' + r.code;
+      if (txt !== lastQR && window.QRCode) {
+        lastQR = txt;
+        if (!qr) qr = new QRCode($('qr'), { text: txt, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
+        else qr.makeCode(txt);
+      }
+    } else { $('qr').innerHTML = ''; qr = null; lastQR = ''; }
+  }).catch(function(e){ $('lvErr').textContent = 'انقطاع مؤقت: ' + e.message; show('lvErr', true); });
+}
+setInterval(function(){
+  if (!live) return;
+  var now = Date.now() + skew;
+  var cl = 30 - Math.floor(now / 1000) % 30; $('cbar').style.width = (cl / 30 * 100) + '%';
+  if (cl === 30) tick();
+  if (live.closed) $('left').textContent = 'مغلقة ومرحّلة للسجل';
+  else if (now > live.end) $('left').textContent = 'انتهى الوقت — اضغط إغلاق وترحيل';
+  else { var s = Math.round((live.end - now) / 1000); $('left').textContent = 'متبقٍ ' + Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+}, 1000);
+
+function drawPresent(list){
+  var L = $('tp'); L.innerHTML = '';
+  if (!list.length) L.appendChild(el('div', 't', 'لا أحد بعد.'));
+  list.forEach(function(x){
+    var d = el('div', 'it'), a = el('div');
+    a.appendChild(el('span', '', x.name + ' '));
+    if (x.guest) a.appendChild(el('span', 'man', 'ضيف: ' + x.guest));
+    if (x.flag) a.appendChild(el('span', 'flag', x.flag));
+    if (x.manual) a.appendChild(el('span', 'man', 'يدوي'));
+    d.appendChild(a); d.appendChild(el('span', 't', x.t)); L.appendChild(d);
+  });
+}
+function drawReq(list){
+  var L = $('tr'); L.innerHTML = '';
+  if (!list.length) L.appendChild(el('div', 't', 'لا توجد طلبات. (تظهر هنا عندما يسجّل طالب من جهاز غير جهازه المربوط)'));
+  list.forEach(function(x){
+    var d = el('div', 'it'); d.appendChild(el('span', '', x.name));
+    var g = el('div'); var ok = el('button', 'btn sm', 'موافقة'), no = el('button', 'btn sm red', 'رفض');
+    ok.onclick = function(){ run('tApprove', PIN, SID, x.id).then(function(r){ if (r && r.msg) alert(r.msg); tick(); }); };
+    no.onclick = function(){ run('tReject', PIN, SID, x.id).then(tick); };
+    g.appendChild(ok); g.appendChild(document.createTextNode(' ')); g.appendChild(no); d.appendChild(g); L.appendChild(d);
+  });
+}
+function drawRoster(){
+  var q = norm($('aq').value), L = $('al'); L.innerHTML = '';
+  var list = ROSTER.filter(function(x){ return q ? norm(x.name).indexOf(q) >= 0 : x.host; });
+  if (!q) L.appendChild(el('div', 't', 'طلاب المحاضرة. للضيوف من شعب ثانية اكتب الاسم بالبحث.'));
+  list.forEach(function(x){
+    var d = el('div', 'it'), a = el('div'); a.appendChild(el('span', '', (x.p ? '✓ ' : '') + x.name + ' '));
+    if (!x.host) a.appendChild(el('span', 'man', x.sec)); d.appendChild(a);
+    var g = el('div');
+    var b = el('button', 'btn sm' + (x.p ? ' red' : ''), x.p ? 'إلغاء الحضور' : 'تسجيل يدوي');
+    b.onclick = function(){ run('tToggle', PIN, SID, x.id, !x.p).then(function(r){ if (r && r.msg) alert(r.msg); x.p = !x.p; drawRoster(); tick(); }); };
+    var u = el('button', 'btn sm ghost', 'فك ربط الجهاز');
+    u.onclick = function(){ if (confirm('فك ربط جهاز ' + x.name + '؟ سيُربط بأول جهاز يسجّل منه لاحقاً.')) run('tUnbind', PIN, x.id).then(function(){ u.textContent = 'تم'; }); };
+    g.appendChild(b); g.appendChild(document.createTextNode(' ')); g.appendChild(u); d.appendChild(g); L.appendChild(d);
+  });
+}
+function tab(t){ curTab = t;
+  [].forEach.call(document.querySelectorAll('.tabs button'), function(b){ b.classList.toggle('on', b.dataset.t === t); });
+  show('tp', t === 'p'); show('tr', t === 'r'); show('ta', t === 'a'); if (t === 'a') drawRoster(); }
+function extend(m){ run('tExtend', PIN, SID, m).then(tick); }
+function closeS(){
+  if (!confirm('إغلاق التسجيل وكتابة (ح/غ) في السجل؟')) return;
+  run('tClose', PIN, SID).then(function(r){ alert('تم الترحيل: ' + r.present + ' حاضر من ' + r.total + (r.guests ? ' + ' + r.guests + ' ضيف (رُحّلوا لشعبهم أو لورقة Guests)' : '')); tick(); });
+}
+function toggleProj(){ $('app').classList.toggle('proj'); }
+function back(){ clearInterval(timer); SID = null; live = null; run('tLogin', PIN).then(function(r){ CFG = r; showSetup(); }); }
+</script>
+</body>
+</html>
