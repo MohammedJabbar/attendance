@@ -101,7 +101,7 @@ var QS_SID = (QS.get('s') || '').replace(/[^\w-]/g, '');
 var QS_CODE = (QS.get('c') || '').replace(/\D/g, '').slice(0, 4);
 var STUDIES = ['صباحي', 'مسائي'], LETTERS = ['A', 'B', 'C'];
 var TOK = getToken(), FP = fingerprint();
-var state = { sid: null, catalog: [], study: '', letter: '', sec: '', list: [], chosen: null, bound: null, locked: false };
+var state = { sid: null, catalog: [], rosters: {}, study: '', letter: '', sec: '', list: [], chosen: null, bound: null, locked: false };
 
 function $(id){ return document.getElementById(id); }
 function show(id, on){ $(id).classList.toggle('hide', !on); }
@@ -134,7 +134,7 @@ function secFor(study, letter){ var c = state.catalog.filter(function(x){ return
 function init(){
   $('hdr').textContent = 'جارٍ التحميل…';
   run('studentInit', TOK).then(function(r){
-    state.bound = r.bound; state.catalog = r.catalog || [];
+    state.bound = r.bound; state.catalog = r.catalog || []; state.rosters = r.rosters || {};
     if (!r.open.length) { $('hdr').textContent = ''; show('none', true); show('form', false); return; }
     show('none', false); show('form', true);
     if (QS_CODE) $('code').value = QS_CODE;
@@ -183,12 +183,16 @@ function loadRoster(){
   $('q').placeholder = sec ? 'اكتب أول حروف اسمك…' : 'اختر الدراسة والشعبة أولاً';
   if (!sec) return;
   out('', '');
+  if (state.rosters[sec]) { setList(state.rosters[sec]); return; }
   run('getSectionRoster', sec).then(function(r){
     if (!r.ok) { out('err', r.msg); return; }
     if (r.sec !== state.sec) return;
-    state.list = r.list.map(function(x){ x.n = norm(x.name); return x; });
-    filter(); $('q').focus();
+    setList(r.list);
   }).catch(function(e){ out('err', 'تعذر تحميل الأسماء: ' + e.message); });
+}
+function setList(list){
+  state.list = list.map(function(x){ return { id: x.id, name: x.name, n: norm(x.name) }; });
+  filter(); $('q').focus();
 }
 
 function filter(){
