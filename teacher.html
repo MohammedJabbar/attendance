@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>لوحة الأستاذ — الحضور</title>
 <meta name="robots" content="noindex">
+<link rel="manifest" href="teacher.webmanifest">
+<meta name="theme-color" content="#0b6e4f">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -257,6 +261,8 @@ function closeS(){
 }
 function toggleProj(){ $('app').classList.toggle('proj'); }
 function back(){ clearInterval(timer); SID = null; live = null; run('tLogin', PIN).then(function(r){ CFG = r; showSetup(); }); }
+// تطبيق قابل للتثبيت (PWA)
+if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
 </script>
 </body>
 </html>
